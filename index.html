@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>YouTube Player</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+    #player { width: 100%; height: 100%; }
+    #error { display: none; color: white; padding: 20px; text-align: center; font-family: system-ui, sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="player"></div>
+  <div id="error"></div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const videoId = params.get('v');
+    const origin = params.get('origin') || '*';
+
+    if (!videoId) {
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('error').textContent = 'No video ID provided';
+    }
+
+    // Load YouTube IFrame API
+    const tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(tag);
+
+    let player = null;
+    let timeInterval = null;
+
+    window.onYouTubeIframeAPIReady = function() {
+      player = new YT.Player('player', {
+        videoId: videoId,
+        host: 'https://www.youtube-nocookie.com',
+        playerVars: {
+          autoplay: 0,
+          controls: 1,
+          modestbranding: 1,
+          rel: 0,
+          playsinline: 1,
+          enablejsapi: 1,
+          origin: window.location.origin,
+          fs: 1
+        },
+        events: {
+          onReady: onPlayerReady,
+          onStateChange: onPlayerStateChange,
+          onError: onPlayerError
+        }
+      });
+    };
+
+    function onPlayerReady(event) {
+      sendToParent({ type: 'ready', duration: player.getDuration() });
+      startTimeUpdates();
+    }
+
+    function onPlayerStateChange(event) {
+      sendToParent({
+        type: 'stateChange',
+        state: event.data,
+        currentTime: player.getCurrentTime(),
+        duration: player.getDuration()
+      });
+
+      // YT.PlayerState.PLAYING = 1
+      if (event.data === 1) {
+        startTimeUpdates();
+      } else {
+        stopTimeUpdates();
+      }
+    }
+
+    function onPlayerError(event) {
+      console.error('YouTube player error:', event.data);
+      sendToParent({ type: 'error', code: event.data });
+    }
+
+    function startTimeUpdates() {
+      if (timeInterval) return;
+      timeInterval = setInterval(() => {
+        if (player && typeof player.getCurrentTime === 'function') {
+          sendToParent({
+            type: 'timeUpdate',
+            currentTime: player.getCurrentTime(),
+            duration: player.getDuration()
+          });
+        }
+      }, 100); // 10Hz updates for smooth tracking
+    }
+
+    function stopTimeUpdates() {
+      if (timeInterval) {
+        clearInterval(timeInterval);
+        timeInterval = null;
+      }
+    }
+
+    function sendToParent(data) {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ source: 'youtube-embed', ...data }, '*');
+      }
+    }
+
+    // Listen for commands from parent
+    window.addEventListener('message', function(event) {
+      if (!player || typeof player.playVideo !== 'function') return;
+
+      const { command, value } = event.data || {};
+
+      switch (command) {
+        case 'play':
+          player.playVideo();
+          break;
+        case 'pause':
+          player.pauseVideo();
+          break;
+        case 'seek':
+          player.seekTo(value, true);
+          break;
+        case 'mute':
+          player.mute();
+          break;
+        case 'unmute':
+          player.unMute();
+          break;
+        case 'setVolume':
+          player.setVolume(value);
+          break;
+        case 'getTime':
+          sendToParent({
+            type: 'timeUpdate',
+            currentTime: player.getCurrentTime(),
+            duration: player.getDuration()
+          });
+          break;
+      }
+    });
+  </script>
+</body>
+</html>
