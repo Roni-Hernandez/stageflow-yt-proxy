@@ -51,7 +51,8 @@
         events: {
           onReady: onPlayerReady,
           onStateChange: onPlayerStateChange,
-          onError: onPlayerError
+          onError: onPlayerError,
+          onPlaybackRateChange: onPlaybackRateChange
         }
       });
     };
@@ -80,6 +81,14 @@
     function onPlayerError(event) {
       console.error('YouTube player error:', event.data);
       sendToParent({ type: 'error', code: event.data });
+    }
+
+    function onPlaybackRateChange(event) {
+      sendToParent({
+        type: 'playbackRateChange',
+        rate: event.data,
+        availableRates: player.getAvailablePlaybackRates()
+      });
     }
 
     function startTimeUpdates() {
@@ -140,9 +149,18 @@
             duration: player.getDuration()
           });
           break;
+        case 'setPlaybackRate':
+          player.setPlaybackRate(value);
+          break;
+        case 'getPlaybackRate':
+          sendToParent({
+            type: 'playbackRate',
+            rate: player.getPlaybackRate(),
+            availableRates: player.getAvailablePlaybackRates()
+          });
+          break;
       }
     });
   </script>
 </body>
 </html>
-<!-- Built Sat Jan 31 00:11:51 CET 2026 -->
